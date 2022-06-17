@@ -25,14 +25,14 @@ namespace TeamService.Controllers
 
         // GET: api/Teams
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Team>>> GetTeams([FromQuery] string? sortOrder, [FromQuery] int page = 1, [FromQuery] int limit = 10)
+        public async Task<ActionResult<IEnumerable<Team>>> GetTeams([FromQuery] string? sortOrder, [FromQuery] int page = 1, [FromQuery] int itemsPerPage = 10)
         {
             if (_context.Teams == null)
             {
                 return NotFound();
             }
 
-            return await GetTeams(sortOrder, ref page, ref limit);
+            return await GetTeams(sortOrder, ref page, ref itemsPerPage);
         }
 
         // GET: api/Teams/5
@@ -55,7 +55,7 @@ namespace TeamService.Controllers
 
         // GET: api/Teams/5/Players
         [HttpGet("{id:int:min(0)}/Players")]
-        public async Task<ActionResult<List<Player>>> GetPlayers(int id)
+        public async Task<ActionResult<List<Player>>> GetPlayersOnTeam(int id)
         {
             if (_context.Teams == null)
             {
@@ -117,7 +117,7 @@ namespace TeamService.Controllers
             _context.Teams.Add(team);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetTeam", new { id = team.Id }, team);
+            return CreatedAtAction(nameof(GetTeam), new { id = team.Id }, team);
         }
 
         // DELETE: api/Teams/5
@@ -144,6 +144,7 @@ namespace TeamService.Controllers
         {
             return new Team()
             {
+                Id = teamDTO.Id,
                 Name = teamDTO.Name,
                 Location = teamDTO.Location
             };
@@ -183,15 +184,15 @@ namespace TeamService.Controllers
             return team.Name.IsNullOrEmpty() || team.Location.IsNullOrEmpty();
         }
 
-        private Task<List<Team>> GetTeams(string? sortOrder, ref int page, ref int limit)
+        private Task<List<Team>> GetTeams(string? sortOrder, ref int page, ref int itemsPerPage)
         {
             // quick and dirty pagination. Specs say "all teams" but pagination should be implemented here.
             page = (page < 1 ? 1 : page);
-            limit = (limit < 10 ? 10 : limit);
-            limit = (limit > 100 ? 100 : limit);
-            var start = page - 1 * limit;
-            var end = page * limit;
-            return GetSortedTeams(sortOrder).Take(new Range(start, end)).ToListAsync();
+            itemsPerPage = (itemsPerPage < 10 ? 10 : itemsPerPage);
+            itemsPerPage = (itemsPerPage > 100 ? 100 : itemsPerPage);
+            var start = (page - 1) * itemsPerPage;
+
+            return GetSortedTeams(sortOrder).Skip(start).Take(itemsPerPage).ToListAsync();
         }
 
         private IQueryable<Team> GetSortedTeams(string? sortOrder)
