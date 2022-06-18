@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -61,7 +62,8 @@ namespace TeamService.Controllers
             {
                 return NotFound();
             }
-            var team = await _context.Teams.FindAsync(id);
+
+            var team = _context.Teams.Include(t => t.Players).FirstOrDefault(t => t.Id == id);
 
             if (team == null)
             {
@@ -69,6 +71,24 @@ namespace TeamService.Controllers
             }
 
             return team.Players ?? new List<Player>();
+        }
+
+        // POST: api/Teams
+        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [HttpPost]
+        public async Task<ActionResult<Team>> PostTeam(TeamDTO teamDTO)
+        {
+            var team = CreateFromDTO(teamDTO);
+
+            if (_context.Teams == null) return Problem("Entity set 'TeamServiceContext.Teams'  is null.");
+
+            if (InvalidTeam(team)) return BadRequest();
+            if (DuplicateTeamExists(team.Name, team.Location)) return Conflict(); // No duplicates
+
+            _context.Teams.Add(team);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetTeam), new { id = team.Id }, team);
         }
 
         // PUT: api/Teams/5
@@ -102,22 +122,37 @@ namespace TeamService.Controllers
             return NoContent();
         }
 
-        // POST: api/Teams
+        // POST: api/Teams/5/Players/2
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<Team>> PostTeam(TeamDTO teamDTO)
+        [HttpPut("{id:int:min(0)}/Players/{playerId:int:min(0)}")]
+        public async Task<ActionResult<Team>> PutPlayerById(int id, int playerId)
         {
-            var team = CreateFromDTO(teamDTO);
-
             if (_context.Teams == null) return Problem("Entity set 'TeamServiceContext.Teams'  is null.");
+            if (!TeamExists(id) || !PlayerExists(playerId)) return BadRequest();
+            var team = _context.Teams.Include(t => t.Players).FirstOrDefault(t => t.Id == id);
+            if (team?.Players != null && (team.Players.Count + 1) > MaxPlayers) return BadRequest("Player count exceeded.");
+            var player = _context.Players.FirstOrDefault(p => p.Id == playerId);
+            
+            team?.Players.Add(player);
+            _context.Entry(team).State = EntityState.Modified;
 
-            if (InvalidTeam(team)) return BadRequest();
-            if (DuplicateTeamExists(team.Name, team.Location)) return Conflict(); // No duplicates
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!TeamExists(id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
 
-            _context.Teams.Add(team);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetTeam), new { id = team.Id }, team);
+            return NoContent();
         }
 
         // DELETE: api/Teams/5
@@ -153,6 +188,11 @@ namespace TeamService.Controllers
         private bool TeamExists(int id)
         {
             return (_context.Teams?.Any(e => e.Id == id)).GetValueOrDefault();
+        }
+
+        private bool PlayerExists(int id)
+        {
+            return (_context.Players?.Any(p => p.Id == id)).GetValueOrDefault();
         }
 
         // No two Teams should exist with the same Name and Location

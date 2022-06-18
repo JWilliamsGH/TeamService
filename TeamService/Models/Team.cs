@@ -1,4 +1,6 @@
-﻿namespace TeamService.Models
+﻿using System.Collections.ObjectModel;
+
+namespace TeamService.Models
 {
     public class Team
     {
