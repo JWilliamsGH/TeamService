@@ -32,7 +32,7 @@ namespace TeamService.Controllers
             }
 
             //return await _context.Players.ToListAsync();
-            return await GetPaginatedPlayers(ref page, ref itemsPerPage);
+            return await GetPaginatedPlayers(lastName, ref page, ref itemsPerPage);
         }
 
         // GET: api/Players/5
@@ -130,7 +130,7 @@ namespace TeamService.Controllers
             return player.FirstName.IsNullOrEmpty() || player.LastName.IsNullOrEmpty();
         }
 
-        private Task<List<Player>> GetPaginatedPlayers(ref int page, ref int itemsPerPage)
+        private Task<List<Player>> GetPaginatedPlayers(string lastName, ref int page, ref int itemsPerPage)
         {
             // quick and dirty pagination. Specs say "all teams" but pagination should be implemented here.
             page = (page < 1 ? 1 : page);
@@ -138,8 +138,8 @@ namespace TeamService.Controllers
             itemsPerPage = (itemsPerPage > 100 ? 100 : itemsPerPage);
             var start = (page - 1) * itemsPerPage;
 
-            //return GetSortedTeams(sortOrder).Skip(start).Take(itemsPerPage).ToListAsync();
-            return _context.Players.Skip(start).Take(itemsPerPage).ToListAsync();
+            if (lastName.IsNullOrEmpty()) return _context.Players.Skip(start).Take(itemsPerPage).ToListAsync();
+            return _context.Players.Where(p => p.LastName == lastName).Skip(start).Take(itemsPerPage).ToListAsync();
         }
     }
 }

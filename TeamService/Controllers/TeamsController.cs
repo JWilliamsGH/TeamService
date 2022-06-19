@@ -128,11 +128,19 @@ namespace TeamService.Controllers
         public async Task<ActionResult<Team>> PutPlayerById(int id, int playerId)
         {
             if (_context.Teams == null) return Problem("Entity set 'TeamServiceContext.Teams'  is null.");
-            if (!TeamExists(id) || !PlayerExists(playerId)) return BadRequest();
-            var team = _context.Teams.Include(t => t.Players).FirstOrDefault(t => t.Id == id);
-            if (team?.Players != null && (team.Players.Count + 1) > MaxPlayers) return BadRequest("Player count exceeded.");
-            var player = _context.Players.FirstOrDefault(p => p.Id == playerId);
             
+            // Make sure both IDs are valid so we can relativly safely assume team and player are not null
+            if (!TeamExists(id) || !PlayerExists(playerId)) return NotFound("Either the Team or Player does not exist.");
+
+            // If the team is at capacity we can exit without any other checks
+            var team = _context.Teams.Include(t => t.Players).FirstOrDefault(t => t.Id == id);
+            if (team?.Players != null && (team.Players.Count) >= MaxPlayers) return BadRequest("Player count exceeded.");
+
+            // If the player exists on the team we can exit
+            var player = _context.Players.FirstOrDefault(p => p.Id == playerId);
+            if (_context.Teams.Any(t => t.Players.Contains(player))) return BadRequest("Player already a member of another team.");
+
+            // Add the player
             team?.Players.Add(player);
             _context.Entry(team).State = EntityState.Modified;
 
@@ -175,6 +183,28 @@ namespace TeamService.Controllers
             return NoContent();
         }
 
+        // Remove a player from a team
+        // DELETE: api/Teams/5/Players/5
+        [HttpDelete("{id:int:min(0)}/Players/{playerId:int:min(0)}")]
+        public async Task<IActionResult> DeletePlayerFromTeam(int id, int playerId)
+        {
+            if (_context.Teams == null) return NotFound();
+
+            // Make sure both IDs are valid so we can relativly safely assume team and player are not null
+            if (!TeamExists(id) || !PlayerExists(playerId)) return NotFound("Either the Team or Player does not exist.");
+
+            var team = _context.Teams.Include(t => t.Players).FirstOrDefault(t => t.Id == id);
+            var player = _context.Players.FirstOrDefault(p => p.Id == playerId);
+
+            // Add the player
+            team?.Players.Remove(player);
+            _context.Entry(team).State = EntityState.Modified;
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
         private Team CreateFromDTO(TeamDTO teamDTO)
         {
             return new Team()
@@ -200,7 +230,10 @@ namespace TeamService.Controllers
         // Does this mean that no duplication is allowed?
         // Does this mean that a given location can not have duplicate names but a different
         // location could have a team name that is the same as another location?
-        // For the purposes of this, I will assume no duplications are allowed.
+        // Is Team A at Location 1 and Team B at Location 1 valid?
+        // Is Team A at Location 1 and Team A at Location 2 valid?
+        // Or is it just Team A at Location 1 and Team B at Location 2 that's valid?
+        // For the purposes of this, I will assume no duplications are allowed and go with the last example
         // Honestly I would do this at the DB level with a unique constraint rather than in code.
         private bool DuplicateTeamExists(string? name, string? location)
         {
